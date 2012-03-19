@@ -1,0 +1,43 @@
+javascript: 
+	var contex = document.createElement("canvas").getContext("2d"); 
+	var list = document.getElementsByTagName("IMG"); 
+	var results = new Array(list.length); 
+	
+	var ss = 16;
+
+	for (var t=0; t<list.length; t++) { 
+		contex.drawImage(list[t],0,0); 
+		var orig = contex.getImageData(0,0,list[t].width,list[t].height).data;
+		var sample = new Array(orig.length);
+		for (var y=0; y*ss*4<orig.length; y++) {
+			for (var x=0; x<ss; x++) {
+				sample[(x+y*ss)*4  ] = orig[(x+(~~(y/list[t].height)*ss)+(y%list[t].height)*list[t].width)*4  ];
+				sample[(x+y*ss)*4+1] = orig[(x+(~~(y/list[t].height)*ss)+(y%list[t].height)*list[t].width)*4+1];
+				sample[(x+y*ss)*4+2] = orig[(x+(~~(y/list[t].height)*ss)+(y%list[t].height)*list[t].width)*4+2];
+				sample[(x+y*ss)*4+3] = orig[(x+(~~(y/list[t].height)*ss)+(y%list[t].height)*list[t].width)*4+3];
+				
+			}
+		}
+		
+		var result = [];
+		
+		var pallet = [];
+		
+		var map = {count:0}; 
+		map["\"#105830\""] = -1; 
+		
+		for (var tt=0; tt<sample.length; tt+=4) { 
+			var cc = ("\"#"+ (sample[tt]+0x100).toString(16).substr(1) + 
+							 (sample[tt+1]+0x100).toString(16).substr(1) + 
+							 (sample[tt+2]+0x100).toString(16).substr(1) + "\"").toUpperCase(); 
+			if (map[cc] == undefined) { 
+				pallet[map.count] = cc;
+				map[cc] = map.count++; 
+			} 
+			result.push(map[cc]); 
+		} 
+		
+		console.log("pallet : ["+pallet.toString()+"]");
+		console.log("map : ["+result.toString()+"]");
+		console.log("map length : " + sample.length/4);
+	}
