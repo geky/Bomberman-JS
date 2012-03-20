@@ -1,6 +1,6 @@
 var collider = {
 
-	speed : 1*60,
+	speed : 0.128*60,
 	
 	
 	step : function(player,dt) {
@@ -8,21 +8,20 @@ var collider = {
 		
 		var paths = this.getpaths(player);
 		var dir = this.dircancel(player.dir);
-		player.adir = 0x0;
 		
 		
 		dist = this.stepfull(player.pdir & dir & paths,player,dist);
 		dist = this.steparound(player.pdir & dir,player,dist);
 		dist = this.stepfull(~player.pdir & dir & paths,player,dist);
 		dist = this.steparound(~player.pdir & dir,player,dist);
+		if (dist) this.anim(player,0x0);
 	},
 
 	stepothers : function(p1,p2,dt) {
 		var dist = this.speed*dt;
 		if (dist <= 0) return;
 		
-		if (p1.adir) p1.pdir = p1.adir;
-		p1.adir = 0x0;		
+		if (p1.adir) p1.pdir = p1.adir;	
 		p1.dir = (p1.posy > p2.posy ? 0x8 : 0x0)|
 			     (p1.posy < p2.posy ? 0x4 : 0x0)|
 			     (p1.posx > p2.posx ? 0x2 : 0x0)|
@@ -30,10 +29,18 @@ var collider = {
 		
 		dist = this.stepexact(p1.pdir & p1.dir & this.getpaths(p1),p1,p2,dist);
 		dist = this.stepexact(p1.dir & this.getpaths(p1),p1,p2,dist);
+		if (dist) this.anim(p1,0x0);
 	},
 
 	dircancel : function(dir) {
 		return (dir & ~(dir<<1) & 0xA)|(dir & ~(dir>>1) & 0x5);
+	},
+	
+	anim : function(p,dir) {
+		if (p.adir != dir) {
+			p.adir = dir;
+			p.ast = new Date().getTime() - starttime;
+		}
 	},
 	
 	stepexact : function(dir,p1,p2,dist) {
@@ -42,25 +49,25 @@ var collider = {
 		if (dir & 0x8) {
 			dist = this.moveupfull(p1,dist);
 			dist = this.correctup(p1,p2,dist);
-			p1.adir = 0x8;
+			this.anim(p1,0x8);
 			if (!dist) return dist;
 		} 	
 		if (dir & 0x4) {
 			dist = this.movednfull(p1,dist);
 			dist = this.correctdn(p1,p2,dist);
-			p1.adir = 0x4;
+			this.anim(p1,0x4);
 			if (!dist) return dist;
 		}		
 		if (dir & 0x2) {
 			dist = this.movelffull(p1,dist);
 			dist = this.correctlf(p1,p2,dist);
-			p1.adir = 0x2;
+			this.anim(p1,0x2);
 			if (!dist) return dist;
 		}	
 		if (dir & 0x1) {
 			dist = this.movertfull(p1,dist);
 			dist = this.correctrt(p1,p2,dist);
-			p1.adir = 0x1;
+			this.anim(p1,0x1);
 		}
 		return dist;
 	},
@@ -70,22 +77,22 @@ var collider = {
 		
 		if (dir & 0x8) {
 			dist = this.moveupfull(player,dist);
-			player.adir = 0x8;
+			this.anim(player,0x8);
 			if (!dist) return dist;
 		} 	
 		if (dir & 0x4) {
 			dist = this.movednfull(player,dist);
-			player.adir = 0x4;
+			this.anim(player,0x4);
 			if (!dist) return dist;
 		}		
 		if (dir & 0x2) {
 			dist = this.movelffull(player,dist);
-			player.adir = 0x2;
+			this.anim(player,0x2);
 			if (!dist) return dist;
 		}	
 		if (dir & 0x1) {
 			dist = this.movertfull(player,dist);
-			player.adir = 0x1;
+			this.anim(player,0x1);
 		}
 		return dist;
 	},
@@ -95,22 +102,22 @@ var collider = {
 		
 		if (dir & 0x8) {
 			dist = this.moveuparound(player,dist);
-			player.adir = 0x8;
+			this.anim(player,0x8);
 			if (!dist) return dist;
 		} 
 		if (dir & 0x4) {
 			dist = this.movednaround(player,dist);
-			player.adir = 0x4;
+			this.anim(player,0x4);
 			if (!dist) return dist;
 		}
 		if (dir & 0x2) {
 			dist = this.movelfaround(player,dist);
-			player.adir = 0x2;
+			this.anim(player,0x2);
 			if (!dist) return dist;
 		}
 		if (dir & 0x1) {
 			dist = this.movertaround(player,dist);
-			player.adir = 0x1;
+			this.anim(player,0x1);
 		}
 		return dist;
 	},

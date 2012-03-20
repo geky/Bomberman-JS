@@ -37,6 +37,7 @@
 			dir:0,      //[up|down|left|right]
 			pdir:0,
 			adir:0,
+			ast:0,
 			bomb:false,
 		}
 		var synch = {
@@ -200,7 +201,7 @@
 						 p.pdir & 0x1 ? [9]
 						 : [3];
 
-			var tile = anim[0];
+			var tile = anim[~~((time-p.ast)/200) % anim.length];
 		
 			renderTile((p.posx-0.5)*tilesize,(p.posy-1.5)*tilesize,tile*2  ,playercache);
 			renderTile((p.posx-0.5)*tilesize,(p.posy-0.5)*tilesize,tile*2+1,playercache);
