@@ -70,6 +70,7 @@ function isLegal(player,nposx,nposy) {
 
 function tick() {
 	io.sockets.emit("tick",{players:players});
+	setTimeout(tick,1000/20);
 }
 
-setInterval(tick,1000/20);
+tick();
