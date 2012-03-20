@@ -22,7 +22,7 @@ var collider = {
 		if (dist <= 0) return;
 		
 		if (p1.adir) p1.pdir = p1.adir;
-		//p1.adir = 0x0;		
+		p1.adir = 0x0;		
 		p1.dir = (p1.posy > p2.posy ? 0x8 : 0x0)|
 			     (p1.posy < p2.posy ? 0x4 : 0x0)|
 			     (p1.posx > p2.posx ? 0x2 : 0x0)|
