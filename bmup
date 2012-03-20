@@ -1,0 +1,1 @@
+scp -P 222 -r [^.]* gsrv@76.255.179.114:/var/www/bomberman
