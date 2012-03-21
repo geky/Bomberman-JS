@@ -127,6 +127,9 @@
 				if (!players || players.length != data.players.length)
 					players = data.players;
 				playersto = data.players;
+				for (var t=0; t<players.length; t++) {
+					if (players[t].stop) players[t].stop--;
+				}
 				update();
 			});
 		}

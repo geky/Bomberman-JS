@@ -29,7 +29,7 @@ var collider = {
 		
 		dist = this.stepexact(p1.pdir & p1.dir & this.getpaths(p1),p1,p2,dist);
 		dist = this.stepexact(p1.dir & this.getpaths(p1),p1,p2,dist);
-		if (dist) this.anim(p1,0x0);
+		if (!p1.stop && dist) this.anim(p1,0x0);
 	},
 
 	dircancel : function(dir) {
@@ -50,24 +50,28 @@ var collider = {
 			dist = this.moveupfull(p1,dist);
 			dist = this.correctup(p1,p2,dist);
 			this.anim(p1,0x8);
+			p1.stop = 1;
 			if (!dist) return dist;
 		} 	
 		if (dir & 0x4) {
 			dist = this.movednfull(p1,dist);
 			dist = this.correctdn(p1,p2,dist);
 			this.anim(p1,0x4);
+			p1.stop = 1;
 			if (!dist) return dist;
 		}		
 		if (dir & 0x2) {
 			dist = this.movelffull(p1,dist);
 			dist = this.correctlf(p1,p2,dist);
 			this.anim(p1,0x2);
+			p1.stop = 1;
 			if (!dist) return dist;
 		}	
 		if (dir & 0x1) {
 			dist = this.movertfull(p1,dist);
 			dist = this.correctrt(p1,p2,dist);
 			this.anim(p1,0x1);
+			p1.stop = 1;
 		}
 		return dist;
 	},
