@@ -1,6 +1,6 @@
 var collider = {
 
-	speed : 0.128*60,
+	speed : 0.0625*60,
 	
 	
 	step : function(player,dt) {
