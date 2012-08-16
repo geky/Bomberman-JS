@@ -1,3 +1,0 @@
-#!/bin/bash
-#node bmserver.js
-go run bmserver.go

@@ -1,1 +1,0 @@
-scp -P 222 -r [^.]* gsrv@www.projectgeky.com:/var/www/bomberman
