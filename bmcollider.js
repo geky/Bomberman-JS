@@ -1,10 +1,12 @@
 var collider = {
 
-	speed : 0.0625*60,
+	speed : function(p) {
+		return ((1/16) + ((p.ups[2]-1)/48)) * 60;
+	},
 	
 	
 	step : function(player,dt) {
-		var dist = this.speed*dt;
+		var dist = this.speed(player)*dt;
 		
 		var paths = this.getpaths(player);
 		var dir = this.dircancel(player.dir);
@@ -18,7 +20,7 @@ var collider = {
 	},
 
 	stepothers : function(p1,p2,dt) {
-		var dist = this.speed*dt;
+		var dist = this.speed(p2)*dt;
 		if (dist <= 0) return;
 		
 		if (p1.adir) p1.pdir = p1.adir;	
@@ -27,9 +29,16 @@ var collider = {
 			     (p1.posx > p2.posx ? 0x2 : 0x0)|
 			     (p1.posx < p2.posx ? 0x1 : 0x0);
 		
-		dist = this.stepexact(p1.pdir & p1.dir & this.getpaths(p1),p1,p2,dist);
-		dist = this.stepexact(p1.dir & this.getpaths(p1),p1,p2,dist);
+		dist = this.stepexact(p1.pdir & p1.dir & this.getpaths(p1,p2),p1,p2,dist);
+		dist = this.stepexact(p1.dir & this.getpaths(p1,p2),p1,p2,dist);
 		if (!p1.stop && dist) this.anim(p1,0x0);
+	},
+	
+	canplace : function(p2,p1) {
+		return (!p1 || 
+					(Math.abs(p2.posx-p1.posx) <= 1 && Math.abs(p2.posy-p1.posy) <= 1 && 
+					(p1.bcount < p2.ups[0]))) &&
+				!map[~~p2.posx + ~~p2.posy*map.width].num;
 	},
 
 	dircancel : function(dir) {
@@ -39,7 +48,7 @@ var collider = {
 	anim : function(p,dir) {
 		if (p.adir != dir) {
 			p.adir = dir;
-			p.ast = new Date().getTime() - starttime;
+			p.ast = time();
 		}
 	},
 	
@@ -164,7 +173,7 @@ var collider = {
 		if (player.posx%1 == 0.5) return dist;
 		
 		var p = (((player.posx-0.5)>>1)<<1)+1.5;
-		if (this.mapget(p,player.posy,0,-1))
+		if (this.mapget(player,p,player.posy,0,-1))
 			return dist;
 			
 		if (p < player.posx)
@@ -182,7 +191,7 @@ var collider = {
 		if (player.posx%1 == 0.5) return dist;
 		
 		var p = (((player.posx-0.5)>>1)<<1)+1.5;
-		if (this.mapget(p,player.posy,0,1))
+		if (this.mapget(player,p,player.posy,0,1))
 			return dist;
 			
 		if (p < player.posx)
@@ -200,7 +209,7 @@ var collider = {
 		if (player.posy%1 == 0.5) return dist;
 		
 		var p = (((player.posy-0.5)>>1)<<1)+1.5;
-		if (this.mapget(player.posx,p,-1,0))
+		if (this.mapget(player,player.posx,p,-1,0))
 			return dist;
 			
 		if (p < player.posy)
@@ -218,7 +227,7 @@ var collider = {
 		if (player.posy%1 == 0.5) return dist;
 		
 		var p = (((player.posy-0.5)>>1)<<1)+1.5;
-		if (this.mapget(player.posx,p,1,0))
+		if (this.mapget(player,player.posx,p,1,0))
 			return dist;
 			
 		if (p < player.posy)
@@ -309,45 +318,46 @@ var collider = {
 	},
 
 
-	getpaths : function(player) {
+	getpaths : function(player,pc) {
 		var paths = 0x0;
 		
 		if (player.posx%1 == 0.5) {
-			if (!this.mapchup(player)) paths |= 0x8;
-			if (!this.mapchdn(player)) paths |= 0x4;
+			if (!this.mapchup(player,pc)) paths |= 0x8;
+			if (!this.mapchdn(player,pc)) paths |= 0x4;
 		}
 		
 		if (player.posy%1 == 0.5) {
-			if (!this.mapchlf(player)) paths |= 0x2;
-			if (!this.mapchrt(player)) paths |= 0x1;
+			if (!this.mapchlf(player,pc)) paths |= 0x2;
+			if (!this.mapchrt(player,pc)) paths |= 0x1;
 		}
 		
 		return paths;
 	},
 
 
-	mapchup : function(player) {
+	mapchup : function(player,pc) {
 		var t = player.posy+0.5;
-		return this.mapget(player.posx,t,0,(t%1?-1:-2));
+		return this.mapget(pc?pc:player,player.posx,t,0,(t%1?-1:-2));
 	},
 
-	mapchdn : function(player) {
+	mapchdn : function(player,pc) {
 		var t = player.posy-0.5;
-		return this.mapget(player.posx,t,0,1);
+		return this.mapget(pc?pc:player,player.posx,t,0,1);
 	},
 
-	mapchlf : function(player) {
+	mapchlf : function(player,pc) {
 		var t = player.posx+0.5;
-		return this.mapget(t,player.posy,(t%1?-1:-2),0);
+		return this.mapget(pc?pc:player,t,player.posy,(t%1?-1:-2),0);
 	},
 
-	mapchrt : function(player) {
+	mapchrt : function(player,pc) {
 		var t = player.posx-0.5;
-		return this.mapget(t,player.posy,1,0);
+		return this.mapget(pc?pc:player,t,player.posy,1,0);
 	},
 
-
-	mapget : function(x,y,offx,offy) {
-		return map[(~~x + offx) + (~~y + offy) * map.width];
+	
+	mapget : function(p,x,y,offx,offy) {
+		return (Math.abs(p.posx - (~~x+offx+0.5)) < 1 && Math.abs(p.posy - (~~y+offy+0.5)) < 1) &&
+			   (map[(~~x+offx)+(~~y+offy)*map.width].num & 0x10);
 	},
 };

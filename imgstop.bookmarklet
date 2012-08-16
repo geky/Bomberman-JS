@@ -1,5 +1,8 @@
 javascript: 
-	var contex = document.createElement("canvas").getContext("2d"); 
+    var ccc = document.createElement("canvas");
+	ccc.setAttribute("width","1000");
+	ccc.setAttribute("height","1000");
+	var contex = ccc.getContext("2d"); 
 	var list = document.getElementsByTagName("IMG"); 
 	var results = new Array(list.length); 
 	
