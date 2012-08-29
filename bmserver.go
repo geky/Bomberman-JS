@@ -1,18 +1,164 @@
 package main
 
 import (
+    "sync"
     "os"
+    "fmt"
     "io"
     "bufio"
     "log"
+    "time"
     "net/http"
-    "sync"
+    "encoding/json"
     "github.com/justinfx/go-socket.io/socketio"
 )
 
+
+type Player struct {
+    Name  string             `json:"name"`
+    Color int                `json:"color"`
+    ID    socketio.SessionID `json:"id"`
+    Game  bool               `json:"game"`
+}
+
+func (p *Player) String() string {
+    if p.Game {return "\033[0;32m"+p.Name+"\033[00m"}
+               return "\033[1;33m"+p.Name+"\033[00m"
+}
+
+
 type Game struct {
-    InGame bool
-    Gamers map[socketio.SessionID]bool
+    InGame  bool
+    Players map[socketio.SessionID]*Player
+    Map     []int32
+    SIO     *socketio.SocketIO
+    Mutex   *sync.Mutex
+}
+
+func NewGame(port string) (g *Game) {
+    config := socketio.DefaultConfig
+    config.Logger = nil
+    config.Origins = []string{"www.projectgeky.com:" + port}
+
+    g = &Game {
+        false,
+        make(map[socketio.SessionID]*Player),
+        []int32{},
+        socketio.NewSocketIO(&config),
+        new(sync.Mutex),
+    }
+
+    g.SIO.OnDisconnect(func(c *socketio.Conn) {
+        g.Disconnect(c.SessionID())
+    })
+
+    g.SIO.OnMessage(func(c *socketio.Conn, m socketio.Message) {
+        //log.Println("!"+m.Data()+"!")
+        var msg map[string]interface{}
+        if json.Unmarshal(m.Bytes(),&msg) != nil {return}
+
+        for key,data := range msg { switch key {
+            case "gamer","watcher":
+                v,ok := data.(map[string]interface{}); if !ok {return}
+                name,ok := v["name"].(string)        ; if !ok {return}
+                color,ok := v["color"].(float64)     ; if !ok {return}
+
+                g.Mutex.Lock()
+                p := &Player{name,int(color),c.SessionID(),key=="gamer"}
+                g.Players[p.ID] = p
+                g.SIO.BroadcastExcept(c,struct{Join *Player}{p})
+
+                type init struct {
+                    ID socketio.SessionID                  `json:"id"`
+                    Players map[socketio.SessionID]*Player `json:"players"`
+                }
+                c.Send(struct{Init init}{init{c.SessionID(),g.Players}})
+                g.Mutex.Unlock()
+
+                log.Println(p.String() + " has joined")
+
+            case "chat":
+                v,ok := data.(string)
+                if !ok || len(v) > 512 {return}
+
+                type message struct {
+                    ID socketio.SessionID `json:"id"`
+                    Message string        `json:"msg"`
+                }
+                g.SIO.Broadcast(struct{Chat message}{message{c.SessionID(),v}})
+
+
+            case "change":
+                v,ok := data.(bool)
+                if (!ok) {return}
+
+                g.Mutex.Lock()
+                p := g.Players[c.SessionID()]
+                if (p == nil) {g.Mutex.Unlock(); return}
+                p.Game = v
+                g.Mutex.Unlock()
+
+                type change struct {
+                    ID socketio.SessionID `json:"id"`
+                    Game bool             `json:"game"`
+                }
+                g.SIO.Broadcast(struct{Change change}{change{c.SessionID(),v}})
+
+            case "disc":
+                g.Disconnect(c.SessionID())
+       }}
+    })
+    return
+}
+
+func (g *Game) Play() {
+    g.Mutex.Lock()
+    g.Map = []int32{0x50,0x50,0x50,0x50}
+    g.Mutex.Unlock()
+    g.SIO.Broadcast(struct{Count int}{5})
+    time.Sleep(5 * time.Second)
+    g.SIO.Broadcast(struct{Start int}{0})
+}
+
+func (g *Game) Disconnect(id socketio.SessionID) {
+    g.Mutex.Lock()
+    defer g.Mutex.Unlock()
+
+    p := g.Players[id]
+    if p==nil {return}
+
+    g.SIO.Broadcast(struct{Disc socketio.SessionID}{id})
+    delete(g.Players,id)
+    log.Println(p.String()+" disconnected")
+}
+
+func (g *Game) Console() {
+    var command string
+    for {
+        fmt.Scan(&command)
+        switch command {
+            case "players":
+                g.Mutex.Lock()
+                for id,p := range g.Players {
+                    fmt.Println(p.String() + ": " + string(id))
+                }
+                g.Mutex.Unlock()
+
+            case "kick":
+                var id socketio.SessionID
+                fmt.Scan(&id)
+                g.Disconnect(id)
+
+            case "start":
+                go g.Play()
+
+            case "end":
+                g.SIO.Broadcast(struct{End int}{0})
+
+            default:
+                fmt.Println("Bad command: "+command)
+        }
+    }
 }
 
 func (g *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -22,53 +168,68 @@ func (g *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         case "GET"    :
     }
 
-    var (
-        file1, file2 *os.File
-        err1, err2 error
-    )
+    var file,inner *os.File
+    var err error
 
-    file1, err1 = os.Open("bm.html")
-    if g.InGame {
-        file2, err2 = os.Open("bmwatch.html")
-    } else {
-        file2, err2 = os.Open("bmwait.html")
+    switch r.URL.Path {
+        case "/bomberman":
+            file, err = os.Open("bm.html")
+            if err!=nil {w.WriteHeader(http.StatusNotFound); return}
+            defer file.Close()
+
+            inner,err = os.Open("bmjoin.html")
+            if err!=nil {w.WriteHeader(http.StatusNotFound); return}
+            defer inner.Close()
+
+        case "/bmgame":
+            file, err = os.Open("bmgame.html")
+            if err!=nil {w.WriteHeader(http.StatusNotFound); return}
+            defer file.Close()
+
+        default: w.WriteHeader(http.StatusNotFound); return
     }
 
-    if err1!=nil || err2!=nil {
-        w.WriteHeader(http.StatusNotFound)
-        return
-    } else {
-        w.WriteHeader(http.StatusOK)
-        defer file1.Close()
-        defer file2.Close()
+    w.WriteHeader(http.StatusOK)
+    reader := bufio.NewReader(file)
+    for {
+        buff,err := reader.ReadBytes('@')
+        switch num,_ := reader.ReadByte(); num {
+            case '1':
+                w.Write(buff[:len(buff)-1])
+                reader.ReadBytes('@')
+
+                io.Copy(w,inner)
+            case '2':
+                w.Write(buff[:len(buff)-1])
+                reader.ReadBytes('@')
+
+                g.Mutex.Lock()
+                buff2,_ := json.Marshal(g.Players)
+                g.Mutex.Unlock()
+                w.Write(buff2)
+            case '3','4':
+                w.Write(buff[:len(buff)-1])
+                reader.ReadBytes('@')
+
+                w.Write([]byte("32"))
+
+            case '5':
+                w.Write(buff[:len(buff)-1])
+                reader.ReadBytes('@')
+
+                g.Mutex.Lock()
+                buff2,_ := json.Marshal(g.Map)
+                g.Mutex.Unlock()
+                w.Write(buff2)
+            default:
+                w.Write(buff)
+        }
+
+        if err != nil {break}
     }
-
-    reader := bufio.NewReader(file1)
-    buff,_ := reader.ReadBytes('@')
-    w.Write(buff[:len(buff)-2])
-    reader.ReadBytes('@')
-
-    io.Copy(w,file2)
-
-    buff,_ = reader.ReadBytes('@')
-    w.Write(buff)
 }
 
-type Announcement struct {
-    Announcement string
-}
-
-type Buffer struct {
-    Buffer []interface{}
-}
-
-type Message struct {
-    Message []string
-}
-
-// A very simple chat server
 func main() {
-    game := new(Game)
 
     var port string
     if len(os.Args) < 2 {
@@ -77,49 +238,20 @@ func main() {
         port = os.Args[1]
     }
 
-    var buffer []interface{}
-    mutex := new(sync.Mutex)
+    game := NewGame(port)
 
-    // create the socket.io server and mux it to /socket.io/
-    config := socketio.DefaultConfig
-    config.Origins = []string{"localhost:"+port}
-    sio := socketio.NewSocketIO(&config)
-
-    // when a client connects - send it the buffer and broadcasta an announcement
-    sio.OnConnect(func(c *socketio.Conn) {
-        mutex.Lock()
-        b := make([]interface{}, len(buffer))
-        copy(b, buffer)
-        c.Send(Buffer{b})
-        mutex.Unlock()
-        log.Println("connection -> " + c.String())
-        sio.Broadcast(Announcement{"connected: " + c.String()})
-    })
-
-    // when a client disconnects - send an announcement
-    sio.OnDisconnect(func(c *socketio.Conn) {
-        log.Println("disconnected -> " + c.String())
-        sio.Broadcast(Announcement{"disconnected: " + c.String()})
-    })
-
-    // when a client send a message - broadcast and store it
-    sio.OnMessage(func(c *socketio.Conn, msg socketio.Message) {
-        payload := Message{[]string{c.String(), msg.Data()}}
-        mutex.Lock()
-        buffer = append(buffer, payload)
-        mutex.Unlock()
-        sio.Broadcast(payload)
-    })
-
-    log.Println("starting bm server on port "+port)
-
-    mux := sio.ServeMux()
+    mux := game.SIO.ServeMux()
     mux.Handle("/bomberman", game)
+    mux.Handle("/bmgame", game)
     mux.Handle("/", http.FileServer(http.Dir(".")))
 
+    log.Println("starting bm server on port "+port)
+    go game.Console()
     err := http.ListenAndServe(":"+port, mux)
 
     if err != nil {
         log.Fatal("ListenAndServe:", err)
     }
 }
+
+

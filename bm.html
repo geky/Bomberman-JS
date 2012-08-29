@@ -2,63 +2,71 @@
 <head>
 
 <style type="text/css">
-    body {
-        background: #212121;
-        font-size: 0.8em;
-        font-family: tahoma,helvetica,arial,sans-serif;
-        color: white;
-        margin: 0px;
-        overflow: hidden;
-    }
-    
-    .bar {
-        background: #585858;
-        padding: 12px;
-        border-radius: 8px;
-        margin: auto;
-    }
-    
-    .inbar {
-        overflow-x: hidden;
-        overflow-y: auto;
-        background: #212121;
-        color: white;
-        margin: 0px;
-        border: 0px;
-        padding: 4px;
-    }
-    
-    #main {
-        position: absolute;
-        text-align: center;
-        z-index: 0;
-    }
+body {
+    background: #212121;
+    font-size: 0.8em;
+    font-family: tahoma,helvetica,arial,sans-serif;
+    color: white;
+    margin: 0px;
+    overflow: hidden;
+}
 
-    .sidebar {
-        position: absolute;
-        margin: 16px auto;
-        z-index: 1;
-    }
+.bar {
+    background: #585858;
+    padding: 12px;
+    border-radius: 8px;
+    margin: auto;
+}
 
+.inbar {
+    overflow: hidden;
+    background: #212121;
+    color: white;
+    margin: 0px;
+    border: 0px;
+    padding: 4px;
+}
 
-    #leftbar {
-        border-top-left-radius: 0px;
-        border-bottom-left-radius: 0px;
-        margin-right: 12px;
-    }
+#main {
+    position: absolute;
+    text-align: center;
+    z-index: 0;
+}
 
-    #rightbar {
-        border-top-right-radius: 0px;
-        border-bottom-right-radius: 0px;
-        margin-left: 12px;
-    }
+.sidebar {
+    position: absolute;
+    margin: 16px auto;
+    z-index: 1;
+}
 
-    .handle {
-        cursor:pointer;
-        text-align: center;
-        height: 100%;
-        width: 12px;
-    }
+#leftbar {
+    border-top-left-radius: 0px;
+    border-bottom-left-radius: 0px;
+    margin-right: 12px;
+}
+
+#rightbar {
+    border-top-right-radius: 0px;
+    border-bottom-right-radius: 0px;
+    margin-left: 12px;
+}
+
+#chatbar, #rankbar { padding: 0px 4px }
+#rankbar { overflow-y: auto }
+#chatin { margin-top: 12px }
+
+.handle {
+    cursor:pointer;
+    text-align: center;
+    height: 100%;
+    width: 12px;
+}
+
+#lhandle { float: right; margin-right: -12px }
+#rhandle { float: left;  margin-left:  -12px }
+
+.face { vertical-align: bottom }
+
 </style>
 
 <title>Bomberman JS!</title>
@@ -66,65 +74,202 @@
 
 <script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.0/jquery.min.js"></script>
 <script src="socket.io/socket.io.min.js"></script>
+<script src="bmdraw.js"></script>
 
 <script>
-    var mainwidth = 512
-    var sidewidth = 128
-    var lhidden,rhidden
+var resizemain
+var mainwidth = 512
+var sidewidth = 128
 
-    $(document).ready(function() {
-        lhidden = rhidden = window.innerWidth < sidewidth + mainwidth + 32
+var keys = {down:{}, up:{}}
 
-        $(window).resize(function() {
-            $('#main')
-                .css('top',(window.innerHeight-$('#main').innerHeight())/2)
-                .css('left',(window.innerWidth-$('#main').innerWidth())/2)
+document.onkeydown = function(ev) {
+    if (keys.down[ev.keyCode]) keys.down[ev.keyCode](ev.keyCode)
+}
 
-            var hh = $('.sidebar').height(window.innerHeight-56).height()
-            $('.inhandle').css('margin-top',(hh-$('.inhandle').height())/2)
-            $('#rankbar').height(hh-8)
-            $('#chatbar').height(hh-$('#chatin').innerHeight()-20)
+document.onkeyup = function(ev) {
+    if (keys.up[ev.keyCode]) keys.up[ev.keyCode](ev.keyCode)
+}
 
-            var ww = (window.innerWidth-mainwidth-72)/2
-            if (ww < sidewidth) ww = sidewidth
-            $('.sidebar').width(ww)
-            $('#chatin').width(ww-8)
-            $('#leftbar').css('left',lhidden? -ww-12 : 0)
-            $('#rightbar').css('right',rhidden? -ww-12 : 0)
-        }).resize()
 
-        $('#lhandle').click(function() {
-            lhidden = !lhidden
-            $('#leftbar').animate({left: lhidden?-$('.sidebar').width()-12:0})
-        })
+var lhidden = window.innerWidth < (sidewidth+mainwidth+32)
+var rhidden = lhidden
 
-        $('#rhandle').click(function() {
-            rhidden = !rhidden
-            $('#rightbar').animate({right: rhidden?-$('.sidebar').width()-12:0})
-        })
-    })
+function hidel() {
+    lhidden = !lhidden
+    $('#leftbar').animate({left: lhidden?-$('.sidebar').width()-12:0})
+}
+
+function hider() {
+    rhidden = !rhidden
+    $('#rightbar').animate({right: rhidden?-$('.sidebar').width()-12:0})
+}
+
+keys.up[219] = hidel
+keys.up[221] = hider
+
+
+var socket
+function socketinit() {
+    socket = new io.Socket()
+
+    socket.on('message',function(msg) {
+        for (m in msg) { var data = msg[m]; switch (m) {
+            case 'Init':
+                players = {}
+                for (i in data.players)
+                    addplayer(data.players[i]) 
+            
+                me = data.players[data.id]
+                message('+ '+me.string()+' has joined')
+                rank()
+                $(window).resize()
+            break
+            case 'Join':
+                addplayer(data)
+                message('+ '+data.string()+' has joined')
+                rank()
+                $(window).resize()
+            break
+            case 'Change':
+                if (!players[data.id]) return
+                var p = players[data.id]
+                p.game = data.game
+                message('> '+p.string()+' is now '+
+                    (data.game?'playing':'spectating'))
+                rank()
+                $(window).resize()
+            break
+            case 'Chat':
+                if (!players[data.id]) return
+                message(players[data.id].string()+': '+data.msg)
+            break
+            case 'Disc':
+                if (!players[data]) return
+                message('- '+players[data].string()+' disconnected')
+                delete(players[data])
+                rank()
+                $(window).resize()
+            break
+            case 'Count':
+                $('#main').load('bmgame', function() {$(window).resize()})
+            break
+            case 'Start':
+            break
+            case 'End':
+                $('#main').load('bmjoin.html', function() {$(window).resize()})
+            break
+        }}
+    })       
+}
+
+var me, players
+
+function addplayer(data) {
+    data.name = data.name.replace(/</g,'&lt;')
+                         .replace(/>/g,'&gt;')
+
+    data.string = function() {
+        return '<span' +
+               (this.game?' style="color:'+hue(this.color)+'">':'>') +
+               this.name + 
+               '</span>'
+    }
+
+    data.rank = function() {
+        return $('<div>')
+            .append(tile(facetiles,['#000000',hue2(this.color,0.75),hue(this.color),'#f8b028'],1,16,$('<canvas class=face>')[0]))
+            .append(' ' + this.string())
+    }
+
+    players[data.id] = data
+}
+
+
+function chat() {
+    var v = $('#chatin').val()
+    if (/[^ ]/.test(v)) socket.send({chat:v})
+    $('#chatin').val('')
+    return false
+}
+
+function message(data) {
+    var bar = $('#chatbar')
+    if (data) bar.append('<div>'+data+'</div>')
+    while (bar[0].scrollHeight > bar[0].clientHeight)
+        bar.children().first().remove()
+}
+
+function rank() {
+    var bar = $('#rankbar')
+    bar.empty()
+    for (id in players)
+        bar.append(players[id].rank())
+}
+
+
+window.onbeforeunload = function() {
+    socket.send({disc:0})
+    console.log("disconnecting")
+}
+
+window.onresize = function() {
+    resizemain()
+    $('#main')
+        .css('top',(window.innerHeight-$('#main').innerHeight())/2)
+        .css('left',(window.innerWidth-$('#main').innerWidth())/2)
+
+    var hh = $('.sidebar').height(window.innerHeight-56).height()
+    $('.inhandle').css('margin-top',(hh-$('.inhandle').height())/2)
+    $('#rankbar').height(hh)
+    $('#chatbar').height(hh-$('#chatin').innerHeight()-12)
+
+    var ww = (window.innerWidth-mainwidth-72)/2
+    if (ww < sidewidth) ww = sidewidth
+    $('.sidebar').width(ww)
+    $('#chatin').width(ww-8)
+    $('#leftbar').css('left',lhidden? -ww-12 : 0)
+    $('#rightbar').css('right',rhidden? -ww-12 : 0)
+
+    message()
+}
+
+$(function() {
+    var pl = @2@
+    players = {}
+    for (i in pl)
+        addplayer(pl[i])
+    rank()
+
+    socketinit()
+    $(window).resize()
+})
 </script>
 
 </head>
-
-
 <body>
+
 <div id=leftbar class="bar sidebar">
-    <div id=lhandle class=handle style="float:right;margin-right:-12px"><div class=inhandle>]</div></div>
-    <div id=rankbar class=inbar>
-    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-    </div>
+  <div id=lhandle class=handle onclick="hidel()">
+    <div class=inhandle>]</div>
+  </div>
+  <div id=chatbar class=inbar></div>
+  <form id=chatform onsubmit="return chat()">
+    <input id=chatin class=inbar type=text placeholder="Chat">
+  </form> 
 </div>
+
 <div id=rightbar class="bar sidebar">
-    <div id=rhandle class=handle style="float:left;margin-left:-12px"><div class=inhandle>[</div></div>
-    <div id=chatbar class=inbar>
-    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-    </div>
-    <input id=chatin class=inbar style="margin-top:12px" type=text placeholder="Chat">
+  <div id=rhandle class=handle onclick="hider()">
+    <div class=inhandle>[</div>
+  </div>
+  <div id=rankbar class=inbar></div>
 </div> 
+
 <div id=main>
-    @ content inserted by bmserver @
+    @1 content inserted by bmserver @
 </div>
+
 </body>
 </html>
 
