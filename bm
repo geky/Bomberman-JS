@@ -1,0 +1,9 @@
+#!/bin/bash
+#node bmserver.js
+
+if lsof -i :8080 ; then
+    BADPROC=`lsof -i :8080 | awk 'END {printf($2)}'`
+    kill $BADPROC
+fi
+
+go run bmserver.go

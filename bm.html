@@ -3,11 +3,14 @@
 
 <style type="text/css">
 body {
-    background: #212121;
     font-size: 0.8em;
+    margin: 0px;
+}
+
+body, .inbar {
+    background: #212121;
     font-family: tahoma,helvetica,arial,sans-serif;
     color: white;
-    margin: 0px;
     overflow: hidden;
 }
 
@@ -19,9 +22,6 @@ body {
 }
 
 .inbar {
-    overflow: hidden;
-    background: #212121;
-    color: white;
     margin: 0px;
     border: 0px;
     padding: 4px;
@@ -77,36 +77,92 @@ body {
 <script src="bmdraw.js"></script>
 
 <script>
-var resizemain
-var mainwidth = 512
-var sidewidth = 128
 
-var keys = {down:{}, up:{}}
+function dbg() {
+    console.log('dbg: ' + arguments)
+    // this is a hook for chrome's breakpoints
+    // and should be removed when finished
+} 
 
-document.onkeydown = function(ev) {
-    if (keys.down[ev.keyCode]) keys.down[ev.keyCode](ev.keyCode)
+
+var main
+    // down: {}
+    // up: {}
+    // width: 512
+    // onmouseup: function(){}
+    // onresize: function(){}
+    // onload: function(){}
+
+function setmain() {
+
+    main.down[84] = 
+    main.down[89] = 
+    main.down[85] = 
+    main.down[73] = function() { 
+        hidel(false)
+        hider(false)
+        $('#chatin').focus() 
+    }
+
+    main.up[219] = hidel
+    main.up[221] = hider
+
+    main.onload()
+    resize()
+    hide()
 }
 
-document.onkeyup = function(ev) {
-    if (keys.up[ev.keyCode]) keys.up[ev.keyCode](ev.keyCode)
+var pixel = 2
+var music = true
+var sound = true
+
+var lhidden
+var rhidden
+
+function hide() {
+    var hide = window.innerWidth < (128 + main.width+32)
+    hidel(hide)
+    hider(hide)
 }
 
-
-var lhidden = window.innerWidth < (sidewidth+mainwidth+32)
-var rhidden = lhidden
-
-function hidel() {
-    lhidden = !lhidden
+function hidel(val) {
+    lhidden = val!==undefined ? val : !lhidden
     $('#leftbar').animate({left: lhidden?-$('.sidebar').width()-12:0})
 }
 
-function hider() {
-    rhidden = !rhidden
+function hider(val) {
+    rhidden = val!==undefined ? val : !rhidden
     $('#rightbar').animate({right: rhidden?-$('.sidebar').width()-12:0})
 }
 
-keys.up[219] = hidel
-keys.up[221] = hider
+
+document.onmouseup = function() { main.onmouseup() }
+
+function keydown(ev) {
+    if (main.down[ev.keyCode]) main.down[ev.keyCode](ev.keyCode)
+}
+
+function keyup(ev) {
+    if (main.up[ev.keyCode]) main.up[ev.keyCode]()
+    else console.log(ev.keyCode)
+}
+
+function keyfocus() {
+    document.onkeydown = keydown
+    document.onkeyup = keyup
+}
+
+function keyblur() {
+    document.onkeydown = null
+    document.onkeyup = function(ev) {
+        if (ev.keyCode == 27) {
+            ev.target.blur()
+            hide()
+        }   
+    }
+}
+
+keyfocus()
 
 
 var socket
@@ -114,58 +170,61 @@ function socketinit() {
     socket = new io.Socket()
 
     socket.on('message',function(msg) {
-        for (m in msg) { var data = msg[m]; switch (m) {
-            case 'Init':
-                players = {}
-                for (i in data.players)
-                    addplayer(data.players[i]) 
-            
-                me = data.players[data.id]
-                message('+ '+me.string()+' has joined')
-                rank()
-                $(window).resize()
-            break
-            case 'Join':
-                addplayer(data)
-                message('+ '+data.string()+' has joined')
-                rank()
-                $(window).resize()
-            break
-            case 'Change':
-                if (!players[data.id]) return
-                var p = players[data.id]
-                p.game = data.game
-                message('> '+p.string()+' is now '+
-                    (data.game?'playing':'spectating'))
-                rank()
-                $(window).resize()
-            break
-            case 'Chat':
-                if (!players[data.id]) return
-                message(players[data.id].string()+': '+data.msg)
-            break
-            case 'Disc':
-                if (!players[data]) return
-                message('- '+players[data].string()+' disconnected')
-                delete(players[data])
-                rank()
-                $(window).resize()
-            break
-            case 'Count':
-                $('#main').load('bmgame', function() {$(window).resize()})
-            break
-            case 'Start':
-            break
-            case 'End':
-                $('#main').load('bmjoin.html', function() {$(window).resize()})
-            break
-        }}
+        for (m in msg) { 
+            var data = msg[m]; 
+            switch (m) {
+                case 'Init':
+                    players = {}
+                    for (i in data.players)
+                        setplayer(data.players[i]) 
+                
+                    me = data.players[data.id]
+                    message('+ '+me.string()+' has joined')
+                    rank()
+                    resize()
+                break
+                case 'Join':
+                    setplayer(data)
+                    message('+ '+data.string()+' has joined')
+                    rank()
+                    resize()
+                break
+                case 'Change':
+                    if (!players[data.id]) return
+                    var p = players[data.id]
+                    p.game = data.game
+                    message('> '+p.string()+' is now '+
+                        (data.game?'playing':'spectating'))
+                    rank()
+                    resize()
+                break
+                case 'Chat':
+                    if (!players[data.id]) return
+                    message(players[data.id].string()+': '+data.msg)
+                break
+                case 'Disc':
+                    if (!players[data]) return
+                    message('- '+players[data].string()+' disconnected')
+                    delete(players[data])
+                    rank()
+                    resize()
+                break
+                case 'Count':
+                    $('#main').load('bmgame', setmain)
+                break
+                case 'Start':
+                break
+                case 'End':
+                    $('#main').load('bmjoin.html', setmain)
+                break
+            }
+        }
     })       
 }
 
 var me, players
 
-function addplayer(data) {
+function setplayer(data) {
     data.name = data.name.replace(/</g,'&lt;')
                          .replace(/>/g,'&gt;')
 
@@ -178,7 +237,7 @@ function addplayer(data) {
 
     data.rank = function() {
         return $('<div>')
-            .append(tile(facetiles,['#000000',hue2(this.color,0.75),hue(this.color),'#f8b028'],1,16,$('<canvas class=face>')[0]))
+            .append(raster(pixmap.face,['#000000',hue2(this.color,0.75),hue(this.color),'#f8b028'],1,16,$('<canvas class=face>')[0]))
             .append(' ' + this.string())
     }
 
@@ -208,24 +267,18 @@ function rank() {
 }
 
 
-window.onbeforeunload = function() {
-    socket.send({disc:0})
-    console.log("disconnecting")
-}
-
-window.onresize = function() {
-    resizemain()
-    $('#main')
-        .css('top',(window.innerHeight-$('#main').innerHeight())/2)
-        .css('left',(window.innerWidth-$('#main').innerWidth())/2)
+var resize = window.onresize = function() {
+    main.onresize()
+    $('#main').css('top',(window.innerHeight-$('#main').innerHeight())/2)
+              .css('left',(window.innerWidth-$('#main').innerWidth())/2)
 
     var hh = $('.sidebar').height(window.innerHeight-56).height()
     $('.inhandle').css('margin-top',(hh-$('.inhandle').height())/2)
     $('#rankbar').height(hh)
     $('#chatbar').height(hh-$('#chatin').innerHeight()-12)
 
-    var ww = (window.innerWidth-mainwidth-72)/2
-    if (ww < sidewidth) ww = sidewidth
+    var ww = (window.innerWidth-main.width-72)/2
+    if (ww < 128) ww = 128
     $('.sidebar').width(ww)
     $('#chatin').width(ww-8)
     $('#leftbar').css('left',lhidden? -ww-12 : 0)
@@ -234,30 +287,25 @@ window.onresize = function() {
     message()
 }
 
-$(function() {
+window.onbeforeunload = function() {
+    socket.send({disc:0})
+    console.log("disconnecting")
+}
+
+window.onload = function() {
     var pl = @2@
     players = {}
     for (i in pl)
-        addplayer(pl[i])
+        setplayer(pl[i])
     rank()
 
     socketinit()
-    $(window).resize()
-})
+    setmain()
+}
 </script>
 
 </head>
 <body>
-
-<div id=leftbar class="bar sidebar">
-  <div id=lhandle class=handle onclick="hidel()">
-    <div class=inhandle>]</div>
-  </div>
-  <div id=chatbar class=inbar></div>
-  <form id=chatform onsubmit="return chat()">
-    <input id=chatin class=inbar type=text placeholder="Chat">
-  </form> 
-</div>
 
 <div id=rightbar class="bar sidebar">
   <div id=rhandle class=handle onclick="hider()">
@@ -265,6 +313,17 @@ $(function() {
   </div>
   <div id=rankbar class=inbar></div>
 </div> 
+
+<div id=leftbar class="bar sidebar">
+  <div id=lhandle class=handle onclick="hidel()">
+    <div class=inhandle>]</div>
+  </div>
+  <div id=chatbar class=inbar></div>
+  <form id=chatform onsubmit="return chat()">
+    <input id=chatin class=inbar type=text placeholder="Chat" 
+     onfocus="keyblur()" onblur="keyfocus()">
+  </form> 
+</div>
 
 <div id=main>
     @1 content inserted by bmserver @

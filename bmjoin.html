@@ -1,0 +1,130 @@
+<style type="text/css">
+.joinopt:hover { background: #c3c3c3 }
+.joinopt {
+    position: relative;
+    background: #7f7f7f;
+    color: white;
+    margin: 0px;
+    border: 0px;
+    padding: 2px 4px;
+    border-radius:4px;
+}
+
+#gametitle { margin: 0px 0px 8px 0px }
+#servmsg { padding-bottom: 0px }
+#namemsg { padding-top: 0px }
+#nameform { margin: 8px 0px 0px 0px }
+
+#joinface { float:left; margin-left:4px }
+#joinin { display:inline-block }
+#spectate, #join { float:right; margin-right: 4px }
+
+#colorin { position:relative }
+#colors { margin:4px 6px }
+#colorhandle {
+    width:12px; 
+    height:12px; 
+    position:absolute; 
+    top:2px
+}
+</style>
+
+<script>
+
+var joinhue = ~~(Math.random()*360)
+
+function joinbm(game) {
+    var v = $('#namein').val()
+    if (!/[^ ]/.test(v)) return false
+
+    if (me) {
+        socket.send({change:game})
+    } else {
+        socket.connect()
+        if(game)
+            socket.send({gamer:{name:v, color:joinhue}})
+        else
+            socket.send({watcher:{name:v, color:joinhue}})
+    }
+
+    keyfocus()
+    return false
+}
+
+function colorslide(ev) {
+    var x, w = $('#colors')[0].width
+
+    if (ev) {
+        x = ev.clientX-$('#colors').offset().left
+        x = x<0 ? 0 : x>=w ? w-1 : x
+        joinhue = ~~(x*360/w)
+        $('#colorin')[0].onmousemove = colorslide
+    } else {
+        x = w * joinhue/360
+    }
+
+    $('#colorhandle').css('left',x)
+    raster(pixmap.face,['#000000',hue2(joinhue,0.75),hue(joinhue),'#f8b028'],2,16,$('#joinface')[0])
+}
+
+main = {
+    width: 512,
+    up: {},
+    down: {
+        37: function() { joinhue -= 10; colorslide() },
+        39: function() { joinhue += 10; colorslide() },
+    },
+
+    onmouseup: function() {
+        $('#colorin')[0].onmousemove = null
+    },
+
+    onresize: function() {
+        var canvas = $('#colors')[0]
+        canvas.width = $('#namein').innerWidth()-12
+        canvas.height = 8
+        $('#joinin').width($('#namein').innerWidth())
+
+        var c = canvas.getContext('2d')
+        if (!c) alert('Your browser is not HTML5 compatible')
+        for (var i=0; i<canvas.width; i++) {
+            c.fillStyle = hue((i*360)/canvas.width)
+            c.fillRect(i,0,1,canvas.height)
+        }
+
+        $('#join,#spectate').css('margin-top',($('#joinin').innerHeight()-$('#join').innerHeight())/2)
+        colorslide()
+        
+        if (me) {
+            $('#namemsg').html(me.rank())
+            $('#joinface,#namein,#colorin,'+(me.game?'#join':'#spectate'))
+                .css('display','none')
+            $(me.game?'#spectate':'#join')
+                .css('display','inline')
+                .css('margin-top',0)
+            $('#joinin').height($('#join').height())
+        }
+    },
+
+    onload: function() {},
+}
+</script>
+
+<div class=bar style="min-width:312px">
+  <h2 id=gametitle>Bomberman JS</h2>
+  <div id=servmsg class=inbar>Bomberman is a WIP</div>
+  <div id=namemsg class=inbar></div>
+  <form id=nameform onsubmit="return joinbm(true)">
+    <canvas id=joinface width=32px height=32px></canvas>
+    <div id=joinin>
+      <input id=namein class=inbar type=text size=16 placeholder="Enter Name" 
+       onfocus="keyblur()" onblur="keyfocus()">
+      <div id=colorin onmousedown="colorslide(event)">
+        <canvas id=colors></canvas>
+        <input id=colorhandle class=joinopt type=button value="">
+      </div>
+    </div>
+    <input id=spectate class=joinopt type=button onclick="return joinbm(false)" value="Spectate">
+    <input id=join class=joinopt type=submit value="Join">
+  </form>
+</div>

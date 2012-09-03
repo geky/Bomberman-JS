@@ -57,63 +57,69 @@ func NewGame(port string) (g *Game) {
         var msg map[string]interface{}
         if json.Unmarshal(m.Bytes(),&msg) != nil {return}
 
-        for key,data := range msg { switch key {
-            case "gamer","watcher":
-                v,ok := data.(map[string]interface{}); if !ok {return}
-                name,ok := v["name"].(string)        ; if !ok {return}
-                color,ok := v["color"].(float64)     ; if !ok {return}
+        for key,data := range msg {
+            switch key {
+                case "gamer","watcher":
+                    v,ok := data.(map[string]interface{}); if !ok {return}
+                    name,ok := v["name"].(string)        ; if !ok {return}
+                    color,ok := v["color"].(float64)     ; if !ok {return}
 
-                g.Mutex.Lock()
-                p := &Player{name,int(color),c.SessionID(),key=="gamer"}
-                g.Players[p.ID] = p
-                g.SIO.BroadcastExcept(c,struct{Join *Player}{p})
+                    g.Mutex.Lock()
+                    p := &Player{name,int(color),c.SessionID(),key=="gamer"}
+                    g.Players[p.ID] = p
+                    g.SIO.BroadcastExcept(c,struct{Join *Player}{p})
 
-                type init struct {
-                    ID socketio.SessionID                  `json:"id"`
-                    Players map[socketio.SessionID]*Player `json:"players"`
-                }
-                c.Send(struct{Init init}{init{c.SessionID(),g.Players}})
-                g.Mutex.Unlock()
+                    type init struct {
+                        ID socketio.SessionID                  `json:"id"`
+                        Players map[socketio.SessionID]*Player `json:"players"`
+                    }
+                    c.Send(struct{Init init}{init{c.SessionID(),g.Players}})
+                    g.Mutex.Unlock()
 
-                log.Println(p.String() + " has joined")
+                    log.Println(p.String() + " has joined")
 
-            case "chat":
-                v,ok := data.(string)
-                if !ok || len(v) > 512 {return}
+                case "chat":
+                    v,ok := data.(string)
+                    if !ok || len(v) > 512 {return}
 
-                type message struct {
-                    ID socketio.SessionID `json:"id"`
-                    Message string        `json:"msg"`
-                }
-                g.SIO.Broadcast(struct{Chat message}{message{c.SessionID(),v}})
+                    type message struct {
+                        ID socketio.SessionID `json:"id"`
+                        Message string        `json:"msg"`
+                    }
+                    g.SIO.Broadcast(struct{Chat message}{message{c.SessionID(),v}})
 
 
-            case "change":
-                v,ok := data.(bool)
-                if (!ok) {return}
+                case "change":
+                    v,ok := data.(bool)
+                    if (!ok) {return}
 
-                g.Mutex.Lock()
-                p := g.Players[c.SessionID()]
-                if (p == nil) {g.Mutex.Unlock(); return}
-                p.Game = v
-                g.Mutex.Unlock()
+                    g.Mutex.Lock()
+                    p := g.Players[c.SessionID()]
+                    if (p == nil) {g.Mutex.Unlock(); return}
+                    p.Game = v
+                    g.Mutex.Unlock()
 
-                type change struct {
-                    ID socketio.SessionID `json:"id"`
-                    Game bool             `json:"game"`
-                }
-                g.SIO.Broadcast(struct{Change change}{change{c.SessionID(),v}})
+                    type change struct {
+                        ID socketio.SessionID `json:"id"`
+                        Game bool             `json:"game"`
+                    }
+                    g.SIO.Broadcast(struct{Change change}{change{c.SessionID(),v}})
 
-            case "disc":
-                g.Disconnect(c.SessionID())
-       }}
+                case "disc":
+                    g.Disconnect(c.SessionID())
+            }
+        }
     })
     return
 }
 
 func (g *Game) Play() {
     g.Mutex.Lock()
-    g.Map = []int32{0x50,0x50,0x50,0x50}
+    g.Map = []int32{0x50,0x50,0x50,    0x50,0x50,
+                    0x50,0x00,0x60d070,0x00,0x50,
+                    0x50,0x70,0x50,    0x70,0x50,
+                    0x50,0x00,0x61d070,0x00,0x50,
+                    0x50,0x50,0x50,    0x50,0x50}
     g.Mutex.Unlock()
     g.SIO.Broadcast(struct{Count int}{5})
     time.Sleep(5 * time.Second)
@@ -211,7 +217,7 @@ func (g *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
                 w.Write(buff[:len(buff)-1])
                 reader.ReadBytes('@')
 
-                w.Write([]byte("32"))
+                w.Write([]byte("5"))
 
             case '5':
                 w.Write(buff[:len(buff)-1])
