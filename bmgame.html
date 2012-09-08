@@ -39,10 +39,7 @@ var tilemap = {
 var gamers = {}
 
 function setgamer(data) {
-    if (!data.game) return
-    gamers[data.id] = {
-        id: data.id,
-    }
+    gamers[data.id] = data
 }
 
 var map = {width: @3@, height: @4@}
@@ -117,7 +114,7 @@ function draw(tick) {
 
 
 main = {
-    width: 512, //TODO
+    width: map.width*16*pixel,
     down: {},
     up: {},
     
@@ -131,7 +128,7 @@ main = {
         for (var i=0; i<mp.length; i++)
             settile(i%map.width, ~~(i/map.width), mp[i])
 
-        var pl = @2@
+        var pl = @6@
         for (var i in pl)
             setgamer(pl[i])
         

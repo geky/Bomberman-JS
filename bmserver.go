@@ -4,6 +4,7 @@ import (
     "sync"
     "os"
     "fmt"
+    "strconv"
     "io"
     "bufio"
     "log"
@@ -26,11 +27,19 @@ func (p *Player) String() string {
                return "\033[1;33m"+p.Name+"\033[00m"
 }
 
+type Gamer struct {
+    Color int                `json:"color"`
+    ID    socketio.SessionID `json:"id"`
+}
+
 
 type Game struct {
     InGame  bool
     Players map[socketio.SessionID]*Player
+    Gamers  map[socketio.SessionID]*Gamer
     Map     []int32
+    Width   int
+    Height  int
     SIO     *socketio.SocketIO
     Mutex   *sync.Mutex
 }
@@ -43,7 +52,8 @@ func NewGame(port string) (g *Game) {
     g = &Game {
         false,
         make(map[socketio.SessionID]*Player),
-        []int32{},
+        make(map[socketio.SessionID]*Gamer),
+        []int32{},0,0,
         socketio.NewSocketIO(&config),
         new(sync.Mutex),
     }
@@ -96,6 +106,7 @@ func NewGame(port string) (g *Game) {
                     g.Mutex.Lock()
                     p := g.Players[c.SessionID()]
                     if (p == nil) {g.Mutex.Unlock(); return}
+
                     p.Game = v
                     g.Mutex.Unlock()
 
@@ -115,12 +126,33 @@ func NewGame(port string) (g *Game) {
 
 func (g *Game) Play() {
     g.Mutex.Lock()
-    g.Map = []int32{0x50,0x50,0x50,    0x50,0x50,
-                    0x50,0x00,0x60d070,0x00,0x50,
-                    0x50,0x70,0x50,    0x70,0x50,
-                    0x50,0x00,0x61d070,0x00,0x50,
-                    0x50,0x50,0x50,    0x50,0x50}
+    num := 0
+    for _,p := range g.Players {
+        g.Gamers[p.ID] = &Gamer{p.Color,p.ID}
+        num++
+    }
+
+    g.Width = (num*7/4)*2+1
+    g.Height = (num*6/4)*2+1
+
+    g.Map = make([]int32,g.Width*g.Height)
+    for i:=0; i<g.Width; i++ {
+        g.Map[i] = 0x50
+        g.Map[i+(g.Height-1)*g.Width] = 0x50
+    }
+    for i:=0; i<g.Height; i++ {
+        g.Map[i*g.Width] = 0x50
+        g.Map[i*g.Width + g.Width-1] = 0x50
+    }
+    for i:=2; i+2<g.Height; i+=2 {
+        for j:=2; j+2<g.Width; j+=2 {
+            g.Map[i*g.Width+j] = 0x50
+        }
+    }
+
     g.Mutex.Unlock()
+
+
     g.SIO.Broadcast(struct{Count int}{5})
     time.Sleep(5 * time.Second)
     g.SIO.Broadcast(struct{Start int}{0})
@@ -213,18 +245,30 @@ func (g *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
                 buff2,_ := json.Marshal(g.Players)
                 g.Mutex.Unlock()
                 w.Write(buff2)
-            case '3','4':
+            case '3':
                 w.Write(buff[:len(buff)-1])
                 reader.ReadBytes('@')
 
-                w.Write([]byte("5"))
+                w.Write([]byte(strconv.Itoa(g.Width)))
+            case '4':
+                w.Write(buff[:len(buff)-1])
+                reader.ReadBytes('@')
 
+                w.Write([]byte(strconv.Itoa(g.Height)))
             case '5':
                 w.Write(buff[:len(buff)-1])
                 reader.ReadBytes('@')
 
                 g.Mutex.Lock()
                 buff2,_ := json.Marshal(g.Map)
+                g.Mutex.Unlock()
+                w.Write(buff2)
+            case '6':
+                w.Write(buff[:len(buff)-1])
+                reader.ReadBytes('@')
+
+                g.Mutex.Lock()
+                buff2,_ := json.Marshal(g.Gamers)
                 g.Mutex.Unlock()
                 w.Write(buff2)
             default:

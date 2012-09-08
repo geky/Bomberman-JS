@@ -95,21 +95,22 @@ var main
 
 function setmain() {
 
-    main.down[84] = 
-    main.down[89] = 
-    main.down[85] = 
-    main.down[73] = function() { 
+    main.up[84] = 
+    main.up[89] = 
+    main.up[85] = 
+    main.up[73] = function() { 
         hidel(false)
         hider(false)
         $('#chatin').focus() 
     }
 
+    main.up[27] = hide
     main.up[219] = hidel
     main.up[221] = hider
 
     main.onload()
     resize()
-    hide()
+    if (!lhidden && !rhidden) hide()
 }
 
 var pixel = 2
