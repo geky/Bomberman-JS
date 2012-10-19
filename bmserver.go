@@ -9,6 +9,8 @@ import (
     "bufio"
     "log"
     "time"
+    "math"
+    "math/rand"
     "net/http"
     "encoding/json"
     "github.com/justinfx/go-socket.io/socketio"
@@ -30,6 +32,8 @@ func (p *Player) String() string {
 type Gamer struct {
     Color int                `json:"color"`
     ID    socketio.SessionID `json:"id"`
+    PosX  int                `json:"posx"`
+    PosY  int                `json:"posy"`
 }
 
 
@@ -37,7 +41,7 @@ type Game struct {
     InGame  bool
     Players map[socketio.SessionID]*Player
     Gamers  map[socketio.SessionID]*Gamer
-    Map     []int32
+    Map     []uint32
     Width   int
     Height  int
     SIO     *socketio.SocketIO
@@ -53,7 +57,7 @@ func NewGame(port string) (g *Game) {
         false,
         make(map[socketio.SessionID]*Player),
         make(map[socketio.SessionID]*Gamer),
-        []int32{},0,0,
+        []uint32{},0,0,
         socketio.NewSocketIO(&config),
         new(sync.Mutex),
     }
@@ -125,17 +129,52 @@ func NewGame(port string) (g *Game) {
 }
 
 func (g *Game) Play() {
+    log.Println("Initializing")
     g.Mutex.Lock()
-    num := 0
+
+    g.Width = len(g.Players)*7/4
+    g.Height = len(g.Players)*6/4
+
     for _,p := range g.Players {
-        g.Gamers[p.ID] = &Gamer{p.Color,p.ID}
-        num++
+        minv := math.MaxFloat64
+        minx, miny := 0,0
+        for x:=0; x<g.Width; x++ {
+            for y:=0; y<g.Height; y++ {
+                sum := 0.0
+
+                for _,q := range g.Gamers {
+                    tx := q.PosX - (x*2+1)
+                    ty := q.PosY - (y*2+1)
+                    tmin := float64(tx*tx + ty*ty)
+
+                    // I'm sorry Mr. Cadle
+                    if tmin == 0 { goto skip }
+
+                    sum += 1/tmin
+                }
+
+                if sum < minv {
+                    minv = sum
+                    minx, miny = (x*2+1),(y*2+1)
+                }
+skip:       }
+        }
+
+        g.Gamers[p.ID] = &Gamer{
+            p.Color,
+            p.ID,
+            minx,
+            miny,
+        }
     }
+    log.Println("Generated Players")
 
-    g.Width = (num*7/4)*2+1
-    g.Height = (num*6/4)*2+1
+    g.Width = g.Width*2 + 1
+    g.Height = g.Height*2 + 1
 
-    g.Map = make([]int32,g.Width*g.Height)
+    g.Map = make([]uint32,g.Width*g.Height)
+
+
     for i:=0; i<g.Width; i++ {
         g.Map[i] = 0x50
         g.Map[i+(g.Height-1)*g.Width] = 0x50
@@ -150,12 +189,57 @@ func (g *Game) Play() {
         }
     }
 
+
+    for _,p := range g.Gamers {
+        g.Map[p.PosX + p.PosY*g.Width] ^= 0x1
+        g.Map[p.PosX+1 + p.PosY*g.Width] ^= 0x1
+        g.Map[p.PosX-1 + p.PosY*g.Width] ^= 0x1
+        g.Map[p.PosX + (p.PosY+1)*g.Width] ^= 0x1
+        g.Map[p.PosX + (p.PosY-1)*g.Width] ^= 0x1
+    }
+
+
+    for i:=0; i<g.Width*g.Height; i++ {
+        if g.Map[i] == 0x00 {
+            rval := rand.Float32()
+
+            if rval < 0.455 {
+                g.Map[i] = 0xd070
+            } else if rval < 0.515 {
+                g.Map[i] = 0xc060d070
+            } else if rval < 0.575 {
+                g.Map[i] = 0xc061d070
+            } else if rval < 0.635 {
+                g.Map[i] = 0xc062d070
+            } else if rval < 0.665 {
+                g.Map[i] = 0xc063d070
+            } else if rval < 0.695 {
+                g.Map[i] = 0xc064d070
+            } else if rval < 0.705 {
+                g.Map[i] = 0xc065d070
+            }
+        }
+    }
+
+
+    for _,p := range g.Gamers {
+        g.Map[p.PosX + p.PosY*g.Width] ^= 0x1
+        g.Map[p.PosX+1 + p.PosY*g.Width] ^= 0x1
+        g.Map[p.PosX-1 + p.PosY*g.Width] ^= 0x1
+        g.Map[p.PosX + (p.PosY+1)*g.Width] ^= 0x1
+        g.Map[p.PosX + (p.PosY-1)*g.Width] ^= 0x1
+    }
+
     g.Mutex.Unlock()
+    log.Println("Created Map")
 
 
     g.SIO.Broadcast(struct{Count int}{5})
+    log.Println("Starting")
     time.Sleep(5 * time.Second)
     g.SIO.Broadcast(struct{Start int}{0})
+
+
 }
 
 func (g *Game) Disconnect(id socketio.SessionID) {

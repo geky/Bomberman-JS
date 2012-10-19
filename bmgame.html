@@ -58,8 +58,10 @@ function cache(p) {
     map.cache = raster(pixmap.tiles,['#202020','#585858','#C0C0C0','#989898','#484848','#707070','#383838','#606060','#000000','#F82800','#50B8F0','#000001','#405058','#687898','#F87800','#F8F8F8','#1860F8','#700000','#F8C800','#F81000','#30A058','#D8B090','#0060F8'],p,16)
     
     for (var i in gamers) {
-        gamers[i].bombcache = raster(pixmap.bombs,["#F8F8F8","#383838","#707070","#989898","#B8A860","#B8B8B8","#808081","#D0D0D0","#F0F0F0","#808080"],p,16)
-        gamers[i].playercache = raster(pixmap.players,["#B0B0B0","#E0E0E0","#606060","#F8F8F8","#C84088","#C8C8C8","#000000","#0000B8","#0070F8","#E04088","#F8B890","#C04080","#606080","#FFFFFF"],p,16)
+        var q = gamers[i]
+        q.bombcache = raster(pixmap.bombs,["#F8F8F8","#383838","#707070","#989898","#B8A860","#B8B8B8","#808081","#D0D0D0","#F0F0F0","#808080"],p,16)
+        q.playercache = raster(pixmap.players,[ 
+            "#B0B0B0", "#E0E0E0", "#606060","#F8F8F8","#C84088","#C8C8C8","#000000","#0000B8","#0070F8","#E04088","#F8B890","#C04080","#606080","#FFFFFF"],p,16)
     }
 }
 
@@ -67,12 +69,12 @@ function cache(p) {
 var starttime /*TODO*/= 0
 var lasttime  /*TODO*/= 0
 
-function tick() {
+function gettick() {
     return (new Date().getTime() - starttime)/50
 }
 
 function run() {
-    var t = tick()
+    var t = gettick()
     step(t)
     draw(t)
 
@@ -85,7 +87,7 @@ function step(tick) {
 }
 
 function draw(tick) {
-    if (!tick) tick = tick()
+    if (!tick) tick = gettick()
 
     var bm = $('#bm')[0]
     bm.width = pixel*map.width*16
@@ -110,6 +112,27 @@ function draw(tick) {
             )
         }
     }
+
+    for (var i in gamers) {
+        var g = gamers[i]
+        var sp = 3
+        ctx.drawImage(
+            g.playercache, 
+            0, (sp*2+1)*tsize, 
+            tsize, tsize,
+            tsize * g.posx,
+            tsize * g.posy,
+            tsize, tsize
+        )
+        ctx.drawImage(
+            g.playercache, 
+            0, (sp*2)*tsize, 
+            tsize, tsize,
+            tsize * g.posx,
+            tsize * (g.posy-1),
+            tsize, tsize
+        )
+    }
 }
 
 
@@ -119,7 +142,7 @@ main = {
     up: {},
     
     onmouseup: function() {},
-    onresize: function() { draw(tick()) },
+    onresize: function() { draw() },
 
     onload: function() {
         map.data = new Array(map.width*map.height)
