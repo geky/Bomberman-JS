@@ -2,72 +2,16 @@
 </style>
 <script>
 
-//0x08 -> bomb
-//0x10 -> walkable
-//0x20 -> breakable
-//0x40 -> explodable
-//0x80 -> volatile
-
-var tilemap = {
-/*  0x00:    nothing       */
-    0x51: /* crusher       */ [1],
-    0x50: /* wall          */ [2],
-    0x70: /* brick         */ [3],
-    
-    0x60: /* bombup        */ [ 5, 5, 6, 6],
-    0x61: /* powerup       */ [ 7, 7, 8, 8],
-    0x62: /* speedup       */ [ 9, 9,10,10],
-    0x63: /* kickup        */ [11,11,12,12],
-    0x64: /* gloveup       */ [13,13,14,14],
-    0x65: /* virus         */ [15,15,16,16],
-    
-    0x78: /* bomb          */ [0,0,0,0,13,13,13,13,26,26,26,26,26,26,26,26,13,13,13,13,0,0,0,0,0,0,0,0,13,13,13,13,26,26,26,26,26,26,26,26,13,13,13,13,0,0,0,0],
-
-    0x80: /* fire mid      */ [32,33,34,35,36,35,36,35,36,35,34,33,32],
-    0x81: /* fire up       */ [ 1, 2, 3, 4, 5, 4, 5, 4, 5, 4, 3, 2, 1],
-    0x82: /* fire down     */ [14,15,16,17,18,17,18,17,18,17,16,15,14],
-    0x83: /* fire left     */ [27,28,29,30,31,30,31,30,31,30,29,28,27],
-    0x84: /* fire right    */ [40,41,42,43,44,43,44,43,44,43,42,41,40],
-    0x85: /* fire vert     */ [ 6, 7, 8, 9,10, 9,10, 9,10, 9, 8, 7, 6],
-    0x86: /* fire horz     */ [19,20,21,22,23,22,23,22,23,22,21,20,19],
-
-    0xd0: /* explode brick */ [11,24,37,50,12,11,24,37,50,12,11,24,37,50,12],
-    0xc0: /* explode pwrup */ [45,46,47,48,49,45,46,47,48,49,45,46,47,48,49],
-    0xd8: /* temp bomb     */ [13,13],
-}
-
 var gamers = {}
-
-function setgamer(data) {
-    gamers[data.id] = data
-}
-
-var map = {width: @3@, height: @4@}
-
-function settile(x,y,num,pl,tick) {
-    var tile = {num: num}
-    if (tilemap[num] && tilemap[num].length > 1) 
-        tile.time = tick
-    if (num & 0x08) 
-        tile.player = pl
-
-    map.data[x+y*map.width] = tile
-}
-
-function cache(p) {
-    map.cache = raster(pixmap.tiles,['#202020','#585858','#C0C0C0','#989898','#484848','#707070','#383838','#606060','#000000','#F82800','#50B8F0','#000001','#405058','#687898','#F87800','#F8F8F8','#1860F8','#700000','#F8C800','#F81000','#30A058','#D8B090','#0060F8'],p,16)
-    
-    for (var i in gamers) {
-        var q = gamers[i]
-        q.bombcache = raster(pixmap.bombs,["#F8F8F8","#383838","#707070","#989898","#B8A860","#B8B8B8","#808081","#D0D0D0","#F0F0F0","#808080"],p,16)
-        q.playercache = raster(pixmap.players,[ 
-            "#B0B0B0", "#E0E0E0", "#606060","#F8F8F8","#C84088","#C8C8C8","#000000","#0000B8","#0070F8","#E04088","#F8B890","#C04080","#606080","#FFFFFF"],p,16)
-    }
-}
+var gameme
 
 
-var starttime /*TODO*/= 0
-var lasttime  /*TODO*/= 0
+var map = new Map(@3@, @4@)
+
+
+var starttime = 0
+var lasttime  = 0
+
 
 function gettick() {
     return (new Date().getTime() - starttime)/50
@@ -82,8 +26,12 @@ function run() {
 }
 
 function step(tick) {
-    
-    
+    var dt = tick-lasttime
+    lasttime = tick
+
+    gameme.step(dt)
+
+    $('#fps').html('fps: ' + (dt>0?~~(20/dt):0))
 }
 
 function draw(tick) {
@@ -96,43 +44,11 @@ function draw(tick) {
 
     ctx.fillStyle = '#105830'
     ctx.fillRect(0,0,bm.width,bm.height)
-    var tsize = pixel*16
 
-    for (var i=0; i < map.data.length; i++) {
-        var tdata = map.data[i]
-        var tile = tilemap[tdata.num & 0xff]
-        if (tile) {
-            ctx.drawImage(
-                tdata.num&0x08 ? tdata.player.bombcache : map.cache, 
-                0, tile[~~((tick-(tdata.time||0)) % tile.length)]*tsize,
-                tsize, tsize,
-                tsize *   (i % map.width),
-                tsize * ~~(i / map.width),
-                tsize, tsize
-            )
-        }
-    }
+    map.draw(ctx, tick)
 
-    for (var i in gamers) {
-        var g = gamers[i]
-        var sp = 3
-        ctx.drawImage(
-            g.playercache, 
-            0, (sp*2+1)*tsize, 
-            tsize, tsize,
-            tsize * g.posx,
-            tsize * g.posy,
-            tsize, tsize
-        )
-        ctx.drawImage(
-            g.playercache, 
-            0, (sp*2)*tsize, 
-            tsize, tsize,
-            tsize * g.posx,
-            tsize * (g.posy-1),
-            tsize, tsize
-        )
-    }
+    for (var i in gamers)
+        gamers[i].draw(ctx, tick)
 }
 
 
@@ -141,21 +57,59 @@ main = {
     down: {},
     up: {},
     
+    net: {
+        'Start': function(data) {
+            var rem = function() {
+                for (var i=0; i<4; i++)
+                    if (gameme.mov & (0x1<<i)) 
+                        return i
+                return gameme.dir
+            }
+
+            main.down[38] = function() { gameme.mov |= 0x1; gameme.dir = 0 }
+            main.down[40] = function() { gameme.mov |= 0x2; gameme.dir = 1 }
+            main.down[37] = function() { gameme.mov |= 0x4; gameme.dir = 2 }
+            main.down[39] = function() { gameme.mov |= 0x8; gameme.dir = 3 }
+
+            main.up[38] = function() { gameme.mov &= ~0x1; gameme.dir = rem() }
+            main.up[40] = function() { gameme.mov &= ~0x2; gameme.dir = rem() }
+            main.up[37] = function() { gameme.mov &= ~0x4; gameme.dir = rem() }
+            main.up[39] = function() { gameme.mov &= ~0x8; gameme.dir = rem() }
+
+            startime = 
+            lasttime = new Date().getTime()
+            run()
+        },
+
+        'End': function(data) {
+            $('#main').load('bmjoin.html', setmain)
+        },
+
+        'Move': function(data) {
+            for (var i in data)
+                if (i!=gameme.id && gamers[i]) gamers[i].sync(data[i])
+
+            socket.send({move: gameme.netcopy()})
+        }
+    },
+
     onmouseup: function() {},
     onresize: function() { draw() },
 
     onload: function() {
-        map.data = new Array(map.width*map.height)
-
         var mp = @5@
         for (var i=0; i<mp.length; i++)
-            settile(i%map.width, ~~(i/map.width), mp[i])
+            map.set(i%map.width, ~~(i/map.width), mp[i])
 
         var pl = @6@
         for (var i in pl)
-            setgamer(pl[i])
+            gamers[i] = new Gamer(i, pl[i])
+
+        gameme = gamers[me.id]
         
-        cache(pixel)
+        map.cache()
+        for (var i in gamers)
+            gamers[i].cache()
     },
 }
 </script>

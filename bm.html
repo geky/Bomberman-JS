@@ -33,6 +33,11 @@ body, .inbar {
     z-index: 0;
 }
 
+#fps {
+    margin: 4px 2px 0px 2px;
+    color: #585858;
+}
+
 .sett { 
     margin: 4px 2px 0px 2px;
     background: #585858;
@@ -83,12 +88,15 @@ body, .inbar {
 
 </style>
 
+
 <title>Bomberman JS!</title>
 <link rel="shortcut icon" href="bmicon.ico">
 
 <script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.0/jquery.min.js"></script>
 <script src="socket.io/socket.io.min.js"></script>
 <script src="bmdraw.js"></script>
+<script src="bm.js"></script>
+
 
 <script>
 
@@ -102,6 +110,7 @@ function dbg() {
 var main
     // down: {}
     // up: {}
+    // net: {}
     // width: 512
     // onmouseup: function(){}
     // onresize: function(){}
@@ -121,6 +130,37 @@ function setmain() {
     main.up[27] = hide
     main.up[219] = hidel
     main.up[221] = hider
+
+
+    main.net['Join'] = function(data) {
+        var p = new Player(data)
+        players[data.id] = p
+        message('+ '+p.string()+' has joined')
+        rank()
+        resize()
+    }
+    
+    main.net['Change'] = function(data) {
+        if (!players[data.id]) return
+        var p = players[data.id]
+        p.game = data.game
+        message('> '+p.string()+' is now '+ (p.game?'playing':'spectating'))
+        rank()
+        resize()
+    }
+
+    main.net['Chat'] = function(data) {
+        if (!players[data.id]) return
+        message(players[data.id].string()+': '+data.msg)
+    }
+
+    main.net['Disc'] = function(data) {
+        if (!players[data]) return
+        message('- '+players[data].string()+' disconnected')
+        delete(players[data])
+        rank()
+        resize()
+    }
 
     main.onload()
     resize()
@@ -169,11 +209,14 @@ document.onmouseup = function() { main.onmouseup() }
 
 function keydown(ev) {
     if (main.down[ev.keyCode]) main.down[ev.keyCode](ev.keyCode)
+    return false
 }
 
 function keyup(ev) {
     if (main.up[ev.keyCode]) main.up[ev.keyCode]()
     else console.log(ev.keyCode)
+    
+    return false
 }
 
 function keyfocus() {
@@ -195,84 +238,15 @@ keyfocus()
 
 
 var socket
+var me, players
+
 function socketinit() {
     socket = new io.Socket()
 
     socket.on('message',function(msg) {
-        for (m in msg) { 
-            var data = msg[m]; 
-            switch (m) {
-                case 'Init':
-                    players = {}
-                    for (i in data.players)
-                        setplayer(data.players[i]) 
-                
-                    me = data.players[data.id]
-                    message('+ '+me.string()+' has joined')
-                    rank()
-                    resize()
-                break
-                case 'Join':
-                    setplayer(data)
-                    message('+ '+data.string()+' has joined')
-                    rank()
-                    resize()
-                break
-                case 'Change':
-                    if (!players[data.id]) return
-                    var p = players[data.id]
-                    p.game = data.game
-                    message('> '+p.string()+' is now '+
-                        (data.game?'playing':'spectating'))
-                    rank()
-                    resize()
-                break
-                case 'Chat':
-                    if (!players[data.id]) return
-                    message(players[data.id].string()+': '+data.msg)
-                break
-                case 'Disc':
-                    if (!players[data]) return
-                    message('- '+players[data].string()+' disconnected')
-                    delete(players[data])
-                    rank()
-                    resize()
-                break
-                case 'Count':
-                    $('#main').load('bmgame', setmain)
-                break
-                case 'Start':
-                    
-                break
-                case 'End':
-                    $('#main').load('bmjoin.html', setmain)
-                break
-            }
-        }
+        for (m in msg)
+            main.net[m](msg[m])
     })       
-}
-
-var me, players
-
-function setplayer(data) {
-    data.name = data.name.replace(/</g,'&lt;')
-                         .replace(/>/g,'&gt;')
-
-    data.string = function() {
-        return '<span' + (this.game?' style="color:'+hue(this.color)+'">':'>') +
-               this.name + 
-               '</span>'
-    }
-
-    data.rank = function() {
-        var temp = $('<div>')
-        if (this.game) 
-            temp.append(raster(pixmap.face,['#000000',hue2(this.color,0.75),hue(this.color),'#f8b028'],1,16,$('<canvas class=face>')[0]))
-        temp.append(' ' + this.string())
-        return temp
-    }
-
-    players[data.id] = data
 }
 
 
@@ -327,7 +301,7 @@ window.onload = function() {
     var pl = @2@
     players = {}
     for (i in pl)
-        setplayer(pl[i])
+        players[pl[i].id] = new Player(pl[i])
     rank()
 
     socketinit()
@@ -366,6 +340,7 @@ window.onload = function() {
     <img class=sett onclick="onsound()" src="bmsound.png" width=16 height=16>
 </div>
 <div id=lsetts>
+    <div id=fps></div>
 </div>
 </div>
 

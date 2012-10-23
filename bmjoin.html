@@ -54,17 +54,20 @@ function joinbm(game) {
 function colorslide(ev) {
     var x, w = $('#colors')[0].width
 
-    if (ev)
+    if (ev) {
         x = ev.clientX-$('#colors').offset().left
-    else
+        $('#colorin')[0].onmousemove = colorslide
+    } else {
         x = w * joinhue/360
+    }
 
     x = x<0 ? 0 : x>=w ? w-1 : x
     joinhue = ~~(x*360/w)
-    $('#colorin')[0].onmousemove = colorslide
 
     $('#colorhandle').css('left',x)
-    raster(pixmap.face,['#000000',hue2(joinhue,0.75),hue(joinhue),'#f8b028'],2,16,$('#joinface')[0])
+    raster(pixmap.face,[
+        '#000000',hue2(joinhue,0.75),hue(joinhue),'#f8b028'
+    ],2,16,$('#joinface')[0])
 }
 
 main = {
@@ -73,6 +76,24 @@ main = {
     down: {
         37: function() { joinhue -= 10; colorslide() },
         39: function() { joinhue += 10; colorslide() },
+    },
+
+    net: {
+        'Init': function(data) {
+            players = {}
+            for (i in data.players)
+                players[data.players[i].id] = new Player(data.players[i]) 
+             
+            me = players[data.id]
+            message('+ '+me.string()+' has joined')
+            rank()
+            resize()
+        },
+        
+        'Count': function(data) {
+            $('#main').load('bmgame', setmain)
+        }
+
     },
 
     onmouseup: function() {

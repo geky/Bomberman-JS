@@ -30,20 +30,22 @@ func (p *Player) String() string {
 }
 
 type Gamer struct {
-    Color int                `json:"color"`
-    ID    socketio.SessionID `json:"id"`
-    PosX  int                `json:"posx"`
-    PosY  int                `json:"posy"`
+    PosX  float64            `json:"posx"`
+    PosY  float64            `json:"posy"`
 }
 
 
 type Game struct {
     InGame  bool
+
     Players map[socketio.SessionID]*Player
-    Gamers  map[socketio.SessionID]*Gamer
     Map     []uint32
     Width   int
     Height  int
+
+    GamerCount  int
+    Gamers      map[socketio.SessionID]*Gamer
+
     SIO     *socketio.SocketIO
     Mutex   *sync.Mutex
 }
@@ -56,8 +58,7 @@ func NewGame(port string) (g *Game) {
     g = &Game {
         false,
         make(map[socketio.SessionID]*Player),
-        make(map[socketio.SessionID]*Gamer),
-        []uint32{},0,0,
+        []uint32{}, 0, 0, 0, nil,
         socketio.NewSocketIO(&config),
         new(sync.Mutex),
     }
@@ -78,8 +79,9 @@ func NewGame(port string) (g *Game) {
                     name,ok := v["name"].(string)        ; if !ok {return}
                     color,ok := v["color"].(float64)     ; if !ok {return}
 
-                    g.Mutex.Lock()
                     p := &Player{name,int(color),c.SessionID(),key=="gamer"}
+
+                    g.Mutex.Lock()
                     g.Players[p.ID] = p
                     g.SIO.BroadcastExcept(c,struct{Join *Player}{p})
 
@@ -105,11 +107,11 @@ func NewGame(port string) (g *Game) {
 
                 case "change":
                     v,ok := data.(bool)
-                    if (!ok) {return}
+                    if !ok {return}
 
                     g.Mutex.Lock()
                     p := g.Players[c.SessionID()]
-                    if (p == nil) {g.Mutex.Unlock(); return}
+                    if p == nil {g.Mutex.Unlock(); return}
 
                     p.Game = v
                     g.Mutex.Unlock()
@@ -122,6 +124,17 @@ func NewGame(port string) (g *Game) {
 
                 case "disc":
                     g.Disconnect(c.SessionID())
+
+                case "move":
+                    v,ok := data.(map[string]interface{}); if !ok {return}
+                    posx,ok := v["posx"].(float64);        if !ok {return}
+                    posy,ok := v["posy"].(float64);        if !ok {return}
+
+                    p := &Gamer{posx, posy}
+
+                    g.Mutex.Lock()
+                    g.Gamers[c.SessionID()] = p
+                    g.Mutex.Unlock()
             }
         }
     })
@@ -129,11 +142,14 @@ func NewGame(port string) (g *Game) {
 }
 
 func (g *Game) Play() {
-    log.Println("Initializing")
+    log.Println("Generating Game")
     g.Mutex.Lock()
 
     g.Width = len(g.Players)*7/4
     g.Height = len(g.Players)*6/4
+
+    g.GamerCount = len(g.Players)
+    g.Gamers = make(map[socketio.SessionID]*Gamer, g.GamerCount)
 
     for _,p := range g.Players {
         minv := math.MaxFloat64
@@ -143,8 +159,8 @@ func (g *Game) Play() {
                 sum := 0.0
 
                 for _,q := range g.Gamers {
-                    tx := q.PosX - (x*2+1)
-                    ty := q.PosY - (y*2+1)
+                    tx := int(q.PosX) - (x*2+1)
+                    ty := int(q.PosY) - (y*2+1)
                     tmin := float64(tx*tx + ty*ty)
 
                     // I'm sorry Mr. Cadle
@@ -160,19 +176,17 @@ func (g *Game) Play() {
 skip:       }
         }
 
+
         g.Gamers[p.ID] = &Gamer{
-            p.Color,
-            p.ID,
-            minx,
-            miny,
+            float64(minx) + 0.5,
+            float64(miny) + 0.5,
         }
     }
-    log.Println("Generated Players")
 
     g.Width = g.Width*2 + 1
     g.Height = g.Height*2 + 1
 
-    g.Map = make([]uint32,g.Width*g.Height)
+    g.Map = make([]uint32, g.Width*g.Height)
 
 
     for i:=0; i<g.Width; i++ {
@@ -191,11 +205,12 @@ skip:       }
 
 
     for _,p := range g.Gamers {
-        g.Map[p.PosX + p.PosY*g.Width] ^= 0x1
-        g.Map[p.PosX+1 + p.PosY*g.Width] ^= 0x1
-        g.Map[p.PosX-1 + p.PosY*g.Width] ^= 0x1
-        g.Map[p.PosX + (p.PosY+1)*g.Width] ^= 0x1
-        g.Map[p.PosX + (p.PosY-1)*g.Width] ^= 0x1
+        tx, ty := int(p.PosX), int(p.PosY)
+        g.Map[tx + ty*g.Width] ^= 0x1
+        g.Map[tx+1 + ty*g.Width] ^= 0x1
+        g.Map[tx-1 + ty*g.Width] ^= 0x1
+        g.Map[tx + (ty+1)*g.Width] ^= 0x1
+        g.Map[tx + (ty-1)*g.Width] ^= 0x1
     }
 
 
@@ -221,25 +236,36 @@ skip:       }
         }
     }
 
-
     for _,p := range g.Gamers {
-        g.Map[p.PosX + p.PosY*g.Width] ^= 0x1
-        g.Map[p.PosX+1 + p.PosY*g.Width] ^= 0x1
-        g.Map[p.PosX-1 + p.PosY*g.Width] ^= 0x1
-        g.Map[p.PosX + (p.PosY+1)*g.Width] ^= 0x1
-        g.Map[p.PosX + (p.PosY-1)*g.Width] ^= 0x1
+        tx, ty := int(p.PosX), int(p.PosY)
+        g.Map[tx + ty*g.Width] ^= 0x1
+        g.Map[tx+1 + ty*g.Width] ^= 0x1
+        g.Map[tx-1 + ty*g.Width] ^= 0x1
+        g.Map[tx + (ty+1)*g.Width] ^= 0x1
+        g.Map[tx + (ty-1)*g.Width] ^= 0x1
     }
 
     g.Mutex.Unlock()
-    log.Println("Created Map")
 
 
+    log.Println("Counting Down...")
     g.SIO.Broadcast(struct{Count int}{5})
-    log.Println("Starting")
     time.Sleep(5 * time.Second)
     g.SIO.Broadcast(struct{Start int}{0})
+    log.Println("Starting Game")
 
 
+    for true {
+        time.Sleep(50 * time.Millisecond)
+
+
+        g.Mutex.Lock()
+
+        g.SIO.Broadcast(struct{Move map[socketio.SessionID]*Gamer}{g.Gamers})
+        g.Gamers = make(map[socketio.SessionID]*Gamer, g.GamerCount)
+
+        g.Mutex.Unlock()
+    }
 }
 
 func (g *Game) Disconnect(id socketio.SessionID) {
