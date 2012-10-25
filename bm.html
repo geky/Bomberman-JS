@@ -245,7 +245,8 @@ function socketinit() {
 
     socket.on('message',function(msg) {
         for (m in msg)
-            main.net[m](msg[m])
+            if (main.net[m])
+                main.net[m](msg[m])
     })       
 }
 

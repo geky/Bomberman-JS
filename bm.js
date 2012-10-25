@@ -128,19 +128,21 @@ var Gamer = (function() {
         this.dir = 1
         this.mov = false
 
+        this.posx = data.posx
+        this.posy = data.posy
         this.sync(data)
     }
         
 
     Gamer.prototype.sync = function(data) {
-        this.posx = data.posx
-        this.posy = data.posy
+        this.tox = data.posx
+        this.toy = data.posy
     }
 
     Gamer.prototype.netcopy = function() {
         return {
-            posx: this.posx,
-            posy: this.posy,
+            posx: this.tox,
+            posy: this.toy,
         }
     }
 
@@ -184,12 +186,68 @@ var Gamer = (function() {
         )
     }
 
+    Gamer.prototype.move = function(dt) {
+        
+    }
+
     Gamer.prototype.step = function(dt) {
+        this.crt(this.toy-this.posy, this.tox-this.posx, 0.00635*60*dt, true)
+    }
+
+    Gamer.prototype.crt = function(up, right, dist, oth) {
+        if (!right || this.posy%1 != 0.5) 
+            return oth && this.cup(up,right,dist,false)
+        var sig = right>0 || -1
+        var off = sig * ((this.posx%1||sig<0) - 0.5)
+
+        if (off < 0)
+            off = -off
+        else if (off > 0 || !map.runin(this.posx+sig, this.posy))
+            off = 0.5-off
+        else
+            return oth && this.cup(up,right,dist,false)
+        
+        if (sig*right < off) 
+            off = sig*right
+
+        if (off > dist) {
+            this.posx += sig*dist
+        } else {
+            this.posx += sig*off
+            this.crt(up, right-sig*off, dist-off, true)
+        }
+    }
+
+    Gamer.prototype.cup = function(up, right, dist, oth) {
+        if (!up || this.posx%1 != 0.5)
+            return oth && this.crt(up,right,dist,false)
+        var sig = up>0 || -1
+        var off = sig * ((this.posy%1||sig<0) - 0.5)
+
+        if (off < 0)
+            off = -off
+        else if (off > 0 || !map.runin(this.posx, this.posy+sig))
+            off = 0.5-off
+        else
+            return oth && this.crt(up,right,dist,false)
+
+        if (sig*up < off) off = sig*up
+        if (off > dist) {
+            this.posy += sig*dist
+        } else {
+            this.posy += sig*off
+            this.cup(up-sig*off, right, dist-off, true)
+        }
+    }
+
+
+
+    Gamer.prototype.s = function(dt) {
         if (this.mov)
             this.collide(this.dir, 0.00625*60*dt)
     }
 
-    Gamer.prototype.collide = function(dir, dist) {
+    Gamer.prototype.c = function(dir, dist) {
         var off
 
         switch (dir) {
