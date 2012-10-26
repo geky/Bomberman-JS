@@ -27,8 +27,9 @@ function step(tick) {
     var dt = tick-lasttime
     lasttime = tick
 
+    gameme.move()
     for (var i in gamers)
-        gamers[i].step(dt)
+        gamers[i].step(dt, i != gameme.id)
 
     $('#fps').html('fps: ' + (dt>0?~~(20/dt):0))
 }

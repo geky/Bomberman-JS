@@ -186,11 +186,74 @@ var Gamer = (function() {
         )
     }
 
-    Gamer.prototype.move = function(dt) {
-        
+    Gamer.prototype.move = function() {
+        this.tox = this.posx
+        this.toy = this.posy
+
+        if (this.mov) this.cmv(this.dir)
     }
 
-    Gamer.prototype.step = function(dt) {
+    Gamer.prototype.cmv = function(dir) {
+        if (dir < 2) {
+            var sig = dir==1 || -1
+            var off = (this.posx-1.5) % 2
+
+            if (off == 0) {
+                off = sig * ((this.posy%1||sig<0) - 0.5)
+
+                if (off < 0) {
+                    this.toy -= off
+                    this.cmv(dir)
+                } else if (off > 0 || !map.runin(this.posx, this.posy+sig)) {
+                    this.toy += 0.5-off
+                    this.cmv(dir)
+                }
+            } else if (off < 1) {
+                if (!map.runin(this.posx-0.5, this.posy+sig)) {
+                    this.cmv(2)
+                    this.cmv(dir)
+                }
+            } else if (off > 1) {
+                if (!map.runin(this.posx+0.5, this.posy+sig)) {
+                    this.cmv(3)
+                    this.cmv(dir)
+                }
+            }
+        } else {
+            var off = (this.posy-1.5) % 2
+            var sig = dir==3 || -1
+
+            if (off == 0) {
+                off = sig * ((this.posx%1||sig<0) - 0.5)
+
+                if (off < 0) {
+                    this.tox -= off
+                    this.cmv(dir)
+                } else if (off > 0 || !map.runin(this.posx+sig, this.posy)) {
+                    this.tox += 0.5-off
+                    this.cmv(dir)
+                }
+            } else if (off < 1) {
+                if (!map.runin(this.posx+sig, this.posy-0.5)) {
+                    this.cmv(0)
+                    this.cmv(dir)
+                }
+            } else if (off > 1) {
+                if (!map.runin(this.posx+sig, this.posy+0.5)) {
+                    this.cmv(1)
+                    this.cmv(dir)
+                }
+            }
+        }
+    }
+
+    Gamer.prototype.step = function(dt, anim) {
+        if (anim) {
+            this.move = this.toy != this.posy || this.tox != this.posx
+            this.dir = Math.abs(this.toy-this.posy) > Math.abs(this.tox-this.posx) ?
+                       this.toy > this.posy ? 1 : 0 : this.tox > this.posx ? 3 : 2
+        }
+
         this.crt(this.toy-this.posy, this.tox-this.posx, 0.00635*60*dt, true)
     }
 
